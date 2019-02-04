@@ -39,13 +39,19 @@ def handle(sock):
 
 def send_response(conn, data):
     #response_data = json.dumps(data).encode('utf-8')
-    response_data = data.encode('utf-8')
+    try:
+        response_data = data.encode('utf-8')
+    except AttributeError:
+        response_data = data
+
     stream_id = conn.get_next_available_stream_id()
+    #IPython.embed()
+    conn.max_outbound_frame_size=len(response_data)
 
     conn.send_headers(
         stream_id=stream_id,
         headers=[
-            (':path', '/'),
+            (':path', '/post'),
             (':method', 'POST'),
             (':scheme', 'http'),
             (':authority', 'localhost'),
@@ -62,18 +68,32 @@ def send_response(conn, data):
 
 def main():
     connection = establish_tcp_connection()
-
     http2_connection = h2.connection.H2Connection()
-
-    # Step 5: Initiate the connection
     http2_connection.initiate_connection()
-    #tls_connection.sendall(http2_connection.data_to_send())
     connection.sendall(http2_connection.data_to_send())
 
     print("Connection set")
 
     while True:
-        data = input("Message to send: ")
+        while True:
+            choice = input("Send an image? (y/n): ")
+            if (choice=="y" or choice=="Y"):
+                choice = input("Give image path or name: ")
+                try:
+                    image = open(choice, "rb")
+                    data = b""
+                    for b in image:
+                        data = data + b
+                except OSError as oserr:
+                    print("Check file name: {0}".format(oserr))
+                except:
+                    print("Error")
+                break
+            elif (choice=="n" or choice=="N"):
+                data = input("Message to send: ")
+                break
+            else:
+                print("Please write either 'y' or 'n'")
         send_response(http2_connection, data)
         data_to_send = http2_connection.data_to_send()
         if data_to_send:
