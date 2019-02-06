@@ -4,6 +4,8 @@ import h2.connection
 import h2.events
 import IPython
 
+tags = []
+
 def send_response(conn, event):
     stream_id = event.stream_id
     response_data = json.dumps(dict(event.headers)).encode('utf-8')
@@ -20,8 +22,22 @@ def send_response(conn, event):
     conn.send_data(
         stream_id=stream_id,
         data=response_data,
-        end_stream=True
+        #end_stream=True
     )
+
+def send_notification(conn):
+    pass
+
+def add_tag(tag):
+    global tags
+    if not tag in tags:
+        tags.append(tag)
+    print("Tags: ", end='')
+    print(tags)
+    return tags
+
+def get_tags():
+    print(tags)
 
 def handle(sock):
     print("Incoming data")
@@ -49,10 +65,18 @@ def handle(sock):
                         method = event.headers[i][1]
             if isinstance(event, h2.events.DataReceived):
                 #print(event.data)
-                if path=='/post' and method=='POST':
-                    f = open("guru99","wb+")
+                if path=='/image' and method=='POST':
+                    f = open("image","wb+")
                     f.write(event.data)
                     f.close
+                elif path=='/notification' and method=='POST':
+                    send_notification()
+                    print("Notification sent!")
+                    conn.push_stream(event.stream_id, conn.get_next_available_stream_id(), [(':path', '/notification'),(':method', 'POST'),(':scheme', 'http'),(':authority', 'localhost'),('content-length', str(len('data'))),('content-type', 'application/json')])
+                elif path=='/tags' and method=='POST':
+                    add_tag(event.data.decode('utf-8'))
+                elif path=='/tags' and method=='GET':
+                    get_tags()  
                 else:
                     print(event.data)
 

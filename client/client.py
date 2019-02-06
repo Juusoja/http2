@@ -14,30 +14,7 @@ def establish_tcp_connection():
     return socket.create_connection(('localhost', 8080))
 
 
-def handle(sock):
-    conn = h2.connection.H2Connection(client_side=False)
-    conn.initiate_connection()
-    sock.sendall(conn.data_to_send())
-
-    while True:
-        data = sock.recv(65535)
-        if not data:
-            break
-
-        events = conn.receive_data(data)
-        for event in events:
-            if isinstance(event, h2.events.RequestReceived):
-                send_response(conn, event)
-            if isinstance(event, h2.events.DataReceived):
-                print(event.data)
-                send_response(conn, event)
-
-        data_to_send = conn.data_to_send()
-        if data_to_send:
-            sock.sendall(data_to_send)
-
-
-def send_response(conn, data):
+def send_response(conn, data, path='/post', method='POST', close_stream=True):
     #response_data = json.dumps(data).encode('utf-8')
     try:
         response_data = data.encode('utf-8')
@@ -46,25 +23,35 @@ def send_response(conn, data):
 
     stream_id = conn.get_next_available_stream_id()
     #IPython.embed()
-    conn.max_outbound_frame_size=len(response_data)
+    conn.max_outbound_frame_size=65536
 
     conn.send_headers(
         stream_id=stream_id,
         headers=[
-            (':path', '/post'),
-            (':method', 'POST'),
+            (':path', path),
+            (':method', method),
             (':scheme', 'http'),
             (':authority', 'localhost'),
-            ('content-length', str(len(response_data))),
+            ('content-length', str(len(data))),
             ('content-type', 'application/json'),
         ],
     )
     conn.send_data(
         stream_id=stream_id,
         data=response_data,
-        end_stream=True
+        end_stream=close_stream
     )
 
+def wait_for_notification(connection, http2_connection):
+    data = b''
+    raw_data = connection.recv(65536)
+    events = http2_connection.receive_data(raw_data)
+    for e in events:
+        print(e)
+
+def send_data(data_to_send, connection):
+    if data_to_send:
+            connection.sendall(data_to_send)
 
 def main():
     connection = establish_tcp_connection()
@@ -76,7 +63,9 @@ def main():
 
     while True:
         while True:
+            data = ""
             choice = input("Send an image? (y/n): ")
+
             if (choice=="y" or choice=="Y"):
                 choice = input("Give image path or name: ")
                 try:
@@ -88,16 +77,36 @@ def main():
                     print("Check file name: {0}".format(oserr))
                 except:
                     print("Error")
+                send_response(http2_connection, data, path='/image')
                 break
             elif (choice=="n" or choice=="N"):
-                data = input("Message to send: ")
-                break
+                choice = input("Test a notification? (y/n): ")
+                if (choice=="y" or choice=="Y"):
+                    send_response(http2_connection, data, path='/notification', close_stream=False)
+                    send_data(http2_connection.data_to_send(), connection)
+                    wait_for_notification(connection, http2_connection)
+                    break
+                elif (choice=="n" or choice=="N"):
+                    choice = input("Post a tag? (y/n): ")
+                    if (choice=="y" or choice=="Y"):
+                        data = input("Tag: ")
+                        send_response(http2_connection, data, path='/tags', close_stream=False)
+                        send_data(http2_connection.data_to_send(), connection)
+                        break
+                    elif (choice=="n" or choice=="N"):
+                        data = input("Message to send: ")
+                        send_response(http2_connection, data)
+                        break
+                    else:
+                        print("Please write either 'y' or 'n'")
+                        break
+                else:
+                    print("Please write either 'y' or 'n'")
+                    break
             else:
                 print("Please write either 'y' or 'n'")
-        send_response(http2_connection, data)
-        data_to_send = http2_connection.data_to_send()
-        if data_to_send:
-            connection.sendall(data_to_send)
+
+        send_data(http2_connection.data_to_send(), connection)
 
 
 if __name__ == "__main__":
