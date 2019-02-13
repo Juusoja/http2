@@ -6,11 +6,6 @@ import IPython
 
 
 def establish_tcp_connection():
-    """
-    This function establishes a client-side TCP connection. How it works isn't
-    very important to this example. For the purpose of this example we connect
-    to localhost.
-    """
     return socket.create_connection(('localhost', 8080))
 
 
@@ -44,6 +39,7 @@ def send_response(conn, data, path='/post', method='POST', close_stream=True):
 
 def wait_for_notification(connection, http2_connection):
     data = b''
+    time.sleep(1)
     raw_data = connection.recv(65536)
     events = http2_connection.receive_data(raw_data)
     for e in events:
@@ -82,7 +78,7 @@ def main():
             elif (choice=="n" or choice=="N"):
                 choice = input("Test a notification? (y/n): ")
                 if (choice=="y" or choice=="Y"):
-                    send_response(http2_connection, data, path='/notification', close_stream=False)
+                    send_response(http2_connection, data, path='/notification', method='GET', close_stream=False)
                     send_data(http2_connection.data_to_send(), connection)
                     wait_for_notification(connection, http2_connection)
                     break
